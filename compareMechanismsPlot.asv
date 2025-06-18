@@ -1,0 +1,44 @@
+function compareMechanismsPlot(configFilename, mechNames)
+
+    if nargin < 1 || isempty(configFilename)
+        configFilename = 'config.json';
+    end
+    if nargin < 2 || isempty(mechNames)
+        mechNames = {'pDRF','cDRF','gready'};
+    end
+
+    cfg = jsondecode(fileread(configFilename));
+    resultsFilename = cfg.output.resultsFilename;
+
+    numMechs = numel(mechNames);
+    colors = lines(numMechs);
+    for m = 1:numMechs
+        S(m) = load(fullfile('results', mechNames{m}, [resultsFilename '.mat']), 'M', 'nList');
+    end
+
+    nList = S(1).nList; 
+    K = numel(nList);
+
+    lineStyles = {'-', '--', ':', '-.', '-', '--', ':', '-.'};  % Extend if needed
+    figure; hold on; grid on;
+    for m = 1:numMechs
+    ls = lineStyles{mod(k-1, length(lineStyles)) + 1};  % cycle through styles
+    avg = squeeze(mean(S(m).M, 1));  % [numN × numExperiments]
+    for k = 1:size(avg, 2)
+        plot(nList, avg(:,k), '-o', 'Color', colors(m,:),'LineStyle', ls, ...
+            'DisplayName', sprintf('%s (exp %d)', mechNames{m}, k));
+    end
+    end
+    xlabel('n'); ylabel('Avg PoA'); title('Avg PoA Comparison'); legend;
+
+    figure; hold on;
+    for m = 1:numMechs
+        [I, K2, E] = size(S(m).M);
+        data = reshape(permute(S(m).M, [1, 3, 2]), I * E, K2);
+        pos = (1:K2) + (m - (numMechs + 1)/2) * 0.3; % Center boxplots
+        boxplot(data, 'positions', pos, 'colors', colors(m,:), 'widths', 0.3);
+    end
+    xticks(1:K); 
+    xticklabels(string(nList));
+    xlabel('n'); ylabel('PoA'); title('PoA Distributions'); legend;
+end

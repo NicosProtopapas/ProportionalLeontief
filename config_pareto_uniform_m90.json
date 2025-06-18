@@ -1,0 +1,66 @@
+{
+  "nList": [20, 40, 60, 80, 100, 120, 140, 160, 180, 200],
+  "m": 90,
+  "numInstances": 50,
+  "dataGeneration": {
+    "valuationsDistribution": "pareto",
+    "valuationsParams": {
+      "x_m": 1,
+      "alpha": 10
+    },
+    "demandsDistribution": "uniform",
+    "demandsParams": {
+    "sparsePattern": "uniform",
+  "noiseLevel": 0.01
+    },
+    "saveData": true,
+    "dataFolder": "data",
+    "dataPrefix": "instance",
+    "normalizeEachAgent": true
+  },
+  "mechanisms": [
+    {
+      "name": "pDRF",
+      "allocation": "proportionalDRF",
+      "payment": "payYourBid",
+      "allocParams": {
+        "exponents": [1, 0.5, 2]
+      }
+    },
+    {
+      "name": "cDRF",
+      "allocation": "conflictDRF",
+      "payment": "payYourBid",
+      "allocParams": {
+        "exponents": [1, 2, 3],
+        "c": 3
+      }
+    },
+    {
+    "name": "greedy",
+    "allocation": "greedy",
+    "payment": "payyourbid_ifallocated",
+    "allocParams": {
+        "exponents": [1]
+    }
+   }
+  ],
+  "bestResponse": {
+    "method": "perAgentGrid",
+    "maxIters": 50,
+    "tol": 1e-5,
+    "gridPoints": 50,
+    "stepSize": 0.5,
+    "delta": 1e-2  
+  },
+  "plots": {
+    "boxplot": true,
+    "errorbar": true
+  },
+  "output": {
+    "saveResults": true,
+    "resultsFolder": "results",
+    "resultsFilename": "pareto_uniform_90"
+  },
+    "seed": 560
+}

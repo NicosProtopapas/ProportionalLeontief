@@ -1,0 +1,104 @@
+function runSimulationParallel(configFile)
+% RUNSIMULATION Compare multiple pay-your-bid mechanisms on the same data.
+    base = fileparts(mfilename('fullpath'));
+    addpath(fullfile(base,'DataGen'), fullfile(base,'Mechanisms'), ...
+            fullfile(base,'Sim'), fullfile(base,'Utils'));
+
+    config = jsondecode(fileread(configFile));
+    nList = config.nList; m = config.m; I = config.numInstances; K = numel(nList);
+
+    % Pre-generate data
+    allData = cell(K,I);
+    rng(0,'twister');
+    fprintf('Pre-generating data...');
+    for k = 1:K
+        for i = 1:I
+            config.instanceIdx = i;
+            [D,v] = dataGenerator(nList(k), m, config);
+            allData{k,i} = struct('D',D,'v',v);
+        end
+    end
+    fprintf(" Done.\n");
+
+    for mIdx = 1:numel(config.mechanisms)
+        mechCfg = config.mechanisms(mIdx);
+        config.mechanism = mechCfg;
+        mechName = mechCfg.name;
+        outFolder = fullfile(base, config.output.resultsFolder, mechName);
+        if config.output.saveResults && ~exist(outFolder,'dir')
+            mkdir(outFolder);
+        end
+
+        exponents = mechCfg.allocParams.exponents;
+        E = numel(exponents);
+        M = NaN(I,K,E);
+        B = cell(I,K,E);
+        A = cell(I,K,E);
+        convergeMask = false(I,K,E);
+        extremeCases = cell(E,1);
+
+        for e = 1:E
+            expVal = exponents(e);
+            config.mechanism.allocParams.exponent = expVal;
+            fprintf('\nMechanism=%s, Exponent=%.2f\n', mechName, expVal);
+            for k = 1:K
+                tic;
+
+                % Preallocate temp variables for this k,e
+                M_temp = NaN(I,1);
+                B_temp = cell(I,1);
+                A_temp = cell(I,1);
+                conv_temp = false(I,1);
+
+                parfor i = 1:I
+                    config_i = config;  % Make a sliced local copy
+                    config_i.fromParfor = true;
+                    D = allData{k,i}.D;
+                    v = allData{k,i}.v;
+
+                    % use a separate RNG seed per worker
+                    s = RandStream('CombRecursive','Seed',i);
+                    RandStream.setGlobalStream(s);
+                    config_i.fromParfor = true;  % Let the function know not to re-seed
+                    
+                    if ~strcmpi(config_i.mechanism.allocation, 'ssvcg')
+                        [bFinal, xFinal, reason, ~] = bestResponseDriver(D,v,config);
+                    else
+                        [bFinal, xFinal, reason, ~] = bestResponseDriver_maxGain(D, v, config);
+                    end
+                    conv_temp(i) = strcmp(reason,'converged');
+
+                    [SWopt, ~, Xopt] = solveOptimalLeontief(D,v);
+                    SWne = computeSocialWelfare(D,v,xFinal);
+                    if SWopt/SWne < 1 % Somethin w
+                        fprintf("PoA=%.2f, OPt= %.2f, EQ= %.2f\n", SWopt/SWne, SWopt, SWne);
+                        fprintf("Warning on i=%d and n=%d\n", i, nList(k));
+                    end
+                    M_temp(i) = SWopt/SWne;
+                    B_temp{i} = bFinal;
+                    A_temp{i} = [sum(xFinal(:)), sum(Xopt(:))];
+                end
+
+                % Assign back to master arrays
+                M(:,k,e) = M_temp;
+                B(:,k,e) = B_temp;
+                A(:,k,e) = A_temp;
+                convergeMask(:,k,e) = conv_temp;
+
+                t = toc;
+                fprintf(' n=%d: avgPoA=%.3f, conv=%.2f%% (%.2fs)\n', ...
+                        nList(k), mean(M_temp,'omitnan'), 100*mean(conv_temp), t);
+            end
+
+            extremeCases{e} = findExtremePoA(M(:,:,e),[],[],[],nList);
+        end
+
+        if config.output.saveResults
+            save(fullfile(outFolder, [config.output.resultsFilename '.mat']), ...
+                 'M','convergeMask','nList','extremeCases','B','A');
+            outCfgName = [config.output.resultsFilename, '.json'];
+            copyfile(configFile, fullfile(outFolder, outCfgName));
+            fprintf('Saved results for %s\n', mechName);
+        end
+    end
+end

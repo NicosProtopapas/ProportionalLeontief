@@ -1,0 +1,34 @@
+function [bFinal,X,exitReason,histU] = bestResponseDriver(D,v,config)
+    n=length(v); 
+    b=0.5*v; 
+    exitReason='maxIters';
+    mi=config.bestResponse.maxIters; 
+    tol=config.bestResponse.tol;
+    method=lower(config.bestResponse.method);
+    G=config.bestResponse.gridPoints;
+    [X,p]=allocateAndPay(b,D,config); 
+    u=computeUtility(v,X,p,D);
+    histU=zeros(mi+1,1); histU(1)=sum(u);
+    for it=1:mi
+      improved=false;
+      for i=1:n
+        curr=u(i); bestU=curr; bestB=b(i);
+        if strcmp(method,'commongrid'), trials=linspace(0,max(v),G);
+        else trials=linspace(0,v(i),G); end
+        for t=trials
+          bC=b; 
+          bC(i)=t; 
+          [XC,PC] = allocateAndPay(bC,D,config);
+          uC=computeUtility(v,XC,PC,D);
+          if uC(i)>bestU, bestU=uC(i); bestB=t; end
+        end
+        if bestU-curr>tol
+          b(i)=bestB; improved=true;
+          [X,p]=allocateAndPay(b,D,config); u=computeUtility(v,X,p,D);
+        end
+      end
+      histU(it+1)=sum(u);
+      if ~improved, exitReason='converged'; break; end
+    end
+    bFinal=b;
+end

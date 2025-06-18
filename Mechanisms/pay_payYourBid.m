@@ -1,0 +1,1 @@
+function p = pay_payYourBid(b,~,~); p=b; end
